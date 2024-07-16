@@ -1,15 +1,16 @@
 import Colors from "@/constants/Colors";
 import { defaultStyles } from "@/constants/Styles";
-import { useSignIn, useSignUp } from "@clerk/clerk-expo";
-import { Link, useLocalSearchParams } from "expo-router";
-import { Fragment, useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { isClerkAPIResponseError, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { Link, useLocalSearchParams } from 'expo-router';
+import { Fragment, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import {
 	CodeField,
 	Cursor,
 	useBlurOnFulfill,
 	useClearByFocusCell,
-} from "react-native-confirmation-code-field";
+} from 'react-native-confirmation-code-field';
+
 const CELL_COUNT = 6;
 
 const Phone = () => {
@@ -18,7 +19,7 @@ const Phone = () => {
 		signin?: string;
 	}>();
 
-	const [code, setCode] = useState("");
+	const [code, setCode] = useState('');
 
 	const { signIn } = useSignIn();
 	const { signUp, setActive } = useSignUp();
@@ -30,21 +31,49 @@ const Phone = () => {
 	});
 
 	useEffect(() => {
-		if (code.length === 6) {
-			verifySignIn();
-		} else {
-			verifyCode();
+		if (code.length === CELL_COUNT) {
+			if (signin === 'true') {
+				verifySignIn();
+			} else {
+				verifyCode();
+			}
 		}
 	}, [code]);
-	const verifyCode = async () => {};
 
-	const verifySignIn = async () => {};
+	const verifyCode = async () => {
+		try {
+			await signUp!.attemptPhoneNumberVerification({
+				code,
+			});
+			await setActive!({ session: signUp!.createdSessionId });
+		} catch (error) {
+			console.log('error', JSON.stringify(error, null, 2));
+			if (isClerkAPIResponseError(error)) {
+				Alert.alert('Error', error.errors[0].message);
+			}
+		}
+	};
+
+	const verifySignIn = async () => {
+		try {
+			await signIn!.attemptFirstFactor({
+				strategy: 'phone_code' || 'email_code',
+				code,
+			});
+			await setActive!({ session: signIn!.createdSessionId });
+		} catch (error) {
+			console.log('error', JSON.stringify(error, null, 2));
+			if (isClerkAPIResponseError(error)) {
+				Alert.alert('Error', error.errors[0].message);
+			}
+		}
+	};
 
 	return (
 		<View style={defaultStyles.container}>
 			<Text style={defaultStyles.header}>6-digit code</Text>
 			<Text style={defaultStyles.descriptionText}>
-				Code sent tp {phone} unless you already have an account.
+				Code sent to {phone!} unless you already have an account.
 			</Text>
 
 			<CodeField
@@ -54,38 +83,31 @@ const Phone = () => {
 				onChangeText={setCode}
 				cellCount={CELL_COUNT}
 				rootStyle={styles.codeFieldRoot}
-				keyboardType="number-pad"
-				textContentType="oneTimeCode"
+				keyboardType='number-pad'
+				textContentType='oneTimeCode'
+				autoComplete={'sms-otp'}
 				renderCell={({ index, symbol, isFocused }) => (
 					<Fragment key={index}>
 						<View
 							// Make sure that you pass onLayout={getCellOnLayoutHandler(index)} prop to root component of "Cell"
 							onLayout={getCellOnLayoutHandler(index)}
 							key={index}
-							style={[
-								styles.cellRoot,
-								isFocused && styles.focusCell,
-							]}
+							style={[styles.cellRoot, isFocused && styles.focusCell]}
 						>
 							<Text style={styles.cellText}>
 								{symbol || (isFocused ? <Cursor /> : null)}
 							</Text>
 						</View>
 						{index === 2 ? (
-							<View
-								key={`separator-${index}`}
-								style={styles.separator}
-							/>
+							<View key={`separator-${index}`} style={styles.separator} />
 						) : null}
 					</Fragment>
 				)}
 			/>
 
-			<View style={{ flexDirection: "row", gap: 10 }}>
-				<Text style={{ fontSize: 18, fontWeight: "500" }}>
-					Already have an account?
-				</Text>
-				<Link href={"/login"} replace asChild>
+			<View style={{ flexDirection: 'row', gap: 10 }}>
+				<Text style={{ fontSize: 18, fontWeight: '500' }}>Already have an account?</Text>
+				<Link href={'/login'} replace asChild>
 					<TouchableOpacity>
 						<Text style={defaultStyles.textLink}>Log in</Text>
 					</TouchableOpacity>
